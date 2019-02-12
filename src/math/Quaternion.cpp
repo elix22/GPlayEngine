@@ -24,6 +24,11 @@ Quaternion::Quaternion(const Matrix& m)
     set(m);
 }
 
+Quaternion::Quaternion(const Vector3& euler)
+{
+    set(euler);
+}
+
 Quaternion::Quaternion(const Vector3& axis, float angle)
 {
     set(axis, angle);
@@ -102,26 +107,28 @@ void Quaternion::createFromRotationTo(const Vector3& start, const Vector3& end, 
     }
 }
 
-void Quaternion::createFromEuler(float yaw, float pitch, float roll, Quaternion* dst)
+void Quaternion::createFromEulerAngles(const Vector3& eulerAngles, Quaternion* dst)
 {
-	GP_ASSERT(dst);
+    GP_ASSERT(dst);
 
-	pitch *= 0.5f;
-	yaw *= 0.5f;
-	roll *= 0.5f;
+    float halfToRad = 0.5f * MATH_PIOVER180;
+    float ex = eulerAngles.x * halfToRad;
+    float ey = eulerAngles.y * halfToRad;
+    float ez = eulerAngles.z * halfToRad;
 
-	float sinp = sin(pitch);
-	float siny = sin(yaw);
-	float sinr = sin(roll);
-	float cosp = cos(pitch);
-	float cosy = cos(yaw);
-	float cosr = cos(roll);
+    float sx = std::sin(ex);
+    float cx = std::cos(ex);
+    float sy = std::sin(ey);
+    float cy = std::cos(ey);
+    float sz = std::sin(ez);
+    float cz = std::cos(ez);
 
-	dst->w = cosp * cosy * cosr + sinp * siny * sinr;
-	dst->x = sinp * cosy * cosr - cosp * siny * sinr;
-	dst->y = cosp * siny * cosr + sinp * cosy * sinr;
-	dst->z = cosp * cosy * sinr - sinp * siny * cosr;
+    dst->x = sx * cy * cz - cx * sy * sz;
+    dst->y = cx * sy * cz + sx * cy * sz;
+    dst->z = cx * cy * sz - sx * sy * cz;
+    dst->w = cx * cy * cz + sx * sy * sz;
 }
+
 
 void Quaternion::createFromRotationMatrix(const Matrix& m, Quaternion* dst)
 {
@@ -143,15 +150,59 @@ void Quaternion::createFromAxisAngle(const Vector3& axis, float angle, Quaternio
     dst->w = cosf(halfAngle);
 }
 
-void Quaternion::computeEuler(float* yaw, float* pitch, float* roll)
+void Quaternion::toEulerAngles(Vector3* eulerAngles) const
 {
-	GP_ASSERT(yaw);
-	GP_ASSERT(pitch);
-	GP_ASSERT(roll);
+    GP_ASSERT(eulerAngles);
 
-	*pitch = std::atan2(2 * (w*x + y*z), 1 - 2 * (x*x + y*y));
-	*yaw = std::asin(2 * (w*y - z*x));
-	*roll = atan2(2 * (w*z + x*y), 1 - 2 * (y*y + z*z));
+    float a2 = 2 * (w * y - x * z);
+    if (a2 <= -0.99999f)
+    {
+        eulerAngles->x = 2 * std::atan2(x, w);
+        eulerAngles->y = -MATH_PIOVER2;
+        eulerAngles->z = 0;
+    }
+    else if (a2 >= 0.99999f)
+    {
+        eulerAngles->x = 2 * std::atan2(x, w);
+        eulerAngles->y = MATH_PIOVER2;
+        eulerAngles->z = 0;
+    }
+    else
+    {
+        eulerAngles->x = std::atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y));
+        eulerAngles->y = std::asin(a2);
+        eulerAngles->z = std::atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
+    }
+    eulerAngles->scale(MATH_180OVERPI);
+
+    // Make positive
+    /*
+    float num = -0.005729578f;
+    float num2 = 360.0f + num;
+    if (eulerAngles->x < num)
+    {
+        eulerAngles->x += 360.0f;
+    }
+    else if( eulerAngles->x > num2)
+    {
+        eulerAngles->x -= 360.0f;
+    }
+    if (eulerAngles->y < num)
+    {
+        eulerAngles->y += 360.0f;
+    }
+    else if (eulerAngles->y > num2)
+    {
+        eulerAngles->y -= 360.0f;
+    }
+    if (eulerAngles->z < num)
+    {
+        eulerAngles->z += 360.0f;
+    }
+    else if (eulerAngles->z > num2)
+    {
+        eulerAngles->z -= 360.0f;
+    }*/
 }
 
 void Quaternion::conjugate()
@@ -296,6 +347,11 @@ void Quaternion::set(float* array)
 void Quaternion::set(const Matrix& m)
 {
     Quaternion::createFromRotationMatrix(m, this);
+}
+
+void Quaternion::set(const Vector3& eulerAngles)
+{
+    Quaternion::createFromEulerAngles(eulerAngles, this);
 }
 
 void Quaternion::set(const Vector3& axis, float angle)

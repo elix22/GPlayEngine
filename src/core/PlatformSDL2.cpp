@@ -2,43 +2,7 @@
 #include "../core/Platform.h"
 #include "../core/Game.h"
 
-
-#include <SDL2/SDL_config.h>
-#include <SDL2/SDL.h>
-    #ifdef GP_PLATFORM_LINUX
-#define SDL_VIDEO_DRIVER_X11
-#endif
-#include <SDL2/SDL_syswm.h>
-#include <bgfx/platform.h>
-
-#include "../renderer/Renderer.h"
-#include "../renderer/BGFXImGui.h"
-
-int __app_argc;
-char** __app_argv;
-
-
 namespace gplay {
-
-// sdl window
-static SDL_Window * __window;
-static int __windowSize[2];
-
-// timer
-static double __timeAbsolute;
-static std::chrono::time_point<std::chrono::high_resolution_clock> __timeStart;
-
-// mouse input
-static bool __mouseCaptured = false;
-static float __mouseCapturePointX = 0;
-static float __mouseCapturePointY = 0;
-static bool __cursorVisible = true;
-
-// keys
-uint8_t _translateKey[256];
-
-// mobile device gesture
-static bool __multiTouch = false;
 
 
 extern int strcmpnocase(const char* s1, const char* s2)
@@ -58,6 +22,11 @@ extern int strcmpnocase(const char* s1, const char* s2)
     return 0;
 #endif
 }
+
+
+#if 0
+
+// old print
 
 extern void print(const char* format, ...)
 {
@@ -82,6 +51,80 @@ extern void print(const char* format, ...)
     va_end(argptr);
 #endif
 }
+
+#else
+
+// new print, using std::cout for output
+
+extern void print(const char* format, ...)
+{
+    GP_ASSERT(format);
+
+    static char buffer[4096] = "";
+
+    va_list argptr;
+    va_start(argptr, format);
+    vsprintf(buffer, format, argptr);
+    va_end(argptr);
+
+    std::cout << buffer << std::flush;
+}
+
+#endif
+
+} // end namespace gplay
+
+#ifndef GP_CUSTOM_PLATFORM
+
+// bgfx imgui
+#include <thirdparty/bgfxcommon/common.h>
+#include <thirdparty/bgfxcommon/imgui/bgfximgui.h>
+entry::MouseState m_mouseState;
+
+
+#include <SDL2/SDL_config.h>
+#include <SDL2/SDL.h>
+    #ifdef GP_PLATFORM_LINUX
+#define SDL_VIDEO_DRIVER_X11
+#endif
+#include <SDL2/SDL_syswm.h>
+#include <bgfx/platform.h>
+
+#include "../renderer/Renderer.h"
+
+
+
+
+
+
+int __app_argc = 0;
+char** __app_argv = nullptr;
+
+
+namespace gplay {
+
+// sdl window
+static SDL_Window * __window;
+static int __windowSize[2];
+
+// timer
+static double __timeAbsolute;
+static std::chrono::time_point<std::chrono::high_resolution_clock> __timeStart;
+
+// mouse input
+static bool __mouseCaptured = false;
+static float __mouseCapturePointX = 0;
+static float __mouseCapturePointY = 0;
+static bool __cursorVisible = true;
+
+// keys
+uint16_t _translateKey[256];
+
+// mobile device gesture
+static bool __multiTouch = false;
+
+
+
 
 void updateWindowSize()
 {
@@ -130,12 +173,12 @@ inline bool setWindowForBgfx(SDL_Window* _window)
 
 void initTranslateKey(uint16_t sdl, Keyboard::Key key)
 {
-    _translateKey[sdl & 0xff] = (uint8_t)key;
+    _translateKey[sdl & 0xffff] = (uint16_t)key;
 }
 
 Keyboard::Key translateKey(SDL_Scancode sdl)
 {
-    return (Keyboard::Key)_translateKey[sdl & 0xff];
+    return (Keyboard::Key)_translateKey[sdl & 0xffff];
 }
 
 
@@ -145,7 +188,7 @@ Keyboard::Key translateKey(SDL_Scancode sdl)
 //-------------------------------------------------------------------------------------------------------------
 
 static bool g_MousePressed[3] = { false, false, false };
-static SDL_Cursor* g_MouseCursors[ImGuiMouseCursor_Count_] = { 0 };
+static SDL_Cursor* g_MouseCursors[ImGuiMouseCursor_COUNT] = { 0 };
 static Uint64 g_Time = 0;
 
 
@@ -162,23 +205,27 @@ static void ImGui_ImplSdlGL3_SetClipboardText(void*, const char* text)
 static void ImGui_ImplSdlGL3_Shutdown()
 {
     // Destroy SDL mouse cursors
-    for (ImGuiMouseCursor cursor_n = 0; cursor_n < ImGuiMouseCursor_Count_; cursor_n++)
+    for (ImGuiMouseCursor cursor_n = 0; cursor_n < ImGuiMouseCursor_COUNT; cursor_n++)
         SDL_FreeCursor(g_MouseCursors[cursor_n]);
     memset(g_MouseCursors, 0, sizeof(g_MouseCursors));
 
-    // Destroy bgfx imgui objects
-    GPImGui::Get()->imguiShutdown();
+    // Destroy bgfx imgui
+    imguiDestroy();
 }
 
 static bool ImGui_ImplSdlGL3_Init(SDL_Window* window)
 {
+    // Create and init bgfx imgui
+    imguiCreate(16.0f);
+
     ImGui::StyleColorsClassic();
 
-    // Create bgfx imgui objects
-    GPImGui::Get()->imguiInit();
-
-    // Keyboard mapping. ImGui will use those indices to peek into the io.KeyDown[] array.
+    // Setup back-end capabilities flags
     ImGuiIO& io = ImGui::GetIO();
+    io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;       // We can honor GetMouseCursor() values (optional)
+    io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;        // We can honor io.WantSetMousePos requests (optional, rarely used)
+
+    // Keyboard mapping. ImGui will use those indices to peek into the io.KeysDown[] array.
     io.KeyMap[ImGuiKey_Tab] = SDL_SCANCODE_TAB;
     io.KeyMap[ImGuiKey_LeftArrow] = SDL_SCANCODE_LEFT;
     io.KeyMap[ImGuiKey_RightArrow] = SDL_SCANCODE_RIGHT;
@@ -212,6 +259,7 @@ static bool ImGui_ImplSdlGL3_Init(SDL_Window* window)
     g_MouseCursors[ImGuiMouseCursor_ResizeEW] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEWE);
     g_MouseCursors[ImGuiMouseCursor_ResizeNESW] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENESW);
     g_MouseCursors[ImGuiMouseCursor_ResizeNWSE] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE);
+    g_MouseCursors[ImGuiMouseCursor_Hand] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
 
 #ifdef _WIN32
     SDL_SysWMinfo wmInfo;
@@ -225,9 +273,79 @@ static bool ImGui_ImplSdlGL3_Init(SDL_Window* window)
     return true;
 }
 
+static void ImGui_ImplSDL2_UpdateMousePosAndButtons()
+{
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Set OS mouse position if requested (rarely used, only when ImGuiConfigFlags_NavEnableSetMousePos is enabled by user)
+    if (io.WantSetMousePos)
+        SDL_WarpMouseInWindow(__window, (int)io.MousePos.x, (int)io.MousePos.y);
+    else
+        io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+
+    int mx, my;
+    Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
+    io.MouseDown[0] = g_MousePressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+    io.MouseDown[1] = g_MousePressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
+    io.MouseDown[2] = g_MousePressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
+    g_MousePressed[0] = g_MousePressed[1] = g_MousePressed[2] = false;
+
+    // bgfx imgui mouse state
+    m_mouseState.m_mx = mx;
+    m_mouseState.m_my = my;
+    m_mouseState.m_buttons[entry::MouseButton::Left] = io.MouseDown[0];
+    m_mouseState.m_buttons[entry::MouseButton::Right] = io.MouseDown[1];
+    m_mouseState.m_buttons[entry::MouseButton::Middle] = io.MouseDown[2];
+
+
+#if SDL_HAS_CAPTURE_MOUSE && !defined(__EMSCRIPTEN__)
+    SDL_Window* focused_window = SDL_GetKeyboardFocus();
+    if (g_Window == focused_window)
+    {
+        // SDL_GetMouseState() gives mouse position seemingly based on the last window entered/focused(?)
+        // The creation of a new windows at runtime and SDL_CaptureMouse both seems to severely mess up with that, so we retrieve that position globally.
+        int wx, wy;
+        SDL_GetWindowPosition(focused_window, &wx, &wy);
+        SDL_GetGlobalMouseState(&mx, &my);
+        mx -= wx;
+        my -= wy;
+        io.MousePos = ImVec2((float)mx, (float)my);
+    }
+
+    // SDL_CaptureMouse() let the OS know e.g. that our imgui drag outside the SDL window boundaries shouldn't e.g. trigger the OS window resize cursor.
+    // The function is only supported from SDL 2.0.4 (released Jan 2016)
+    bool any_mouse_button_down = ImGui::IsAnyMouseDown();
+    SDL_CaptureMouse(any_mouse_button_down ? SDL_TRUE : SDL_FALSE);
+#else
+    if (SDL_GetWindowFlags(__window) & SDL_WINDOW_INPUT_FOCUS)
+        io.MousePos = ImVec2((float)mx, (float)my);
+#endif
+}
+
+static void ImGui_ImplSDL2_UpdateMouseCursor()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange)
+        return;
+
+    ImGuiMouseCursor imgui_cursor = ImGui::GetMouseCursor();
+    if (io.MouseDrawCursor || imgui_cursor == ImGuiMouseCursor_None)
+    {
+        // Hide OS mouse cursor if imgui is drawing it or if it wants no cursor
+        SDL_ShowCursor(SDL_FALSE);
+    }
+    else
+    {
+        // Show OS mouse cursor
+        SDL_SetCursor(g_MouseCursors[imgui_cursor] ? g_MouseCursors[imgui_cursor] : g_MouseCursors[ImGuiMouseCursor_Arrow]);
+        SDL_ShowCursor(SDL_TRUE);
+    }
+}
+
 static void ImGui_ImplSdlGL3_NewFrame(SDL_Window* window)
 {
     ImGuiIO& io = ImGui::GetIO();
+    IM_ASSERT(io.Fonts->IsBuilt());     // Font atlas needs to be built, call renderer _NewFrame() function e.g. ImGui_ImplOpenGL3_NewFrame()
 
     // Setup display size (every frame to accommodate for window resizing)
     int w, h;
@@ -238,53 +356,32 @@ static void ImGui_ImplSdlGL3_NewFrame(SDL_Window* window)
     io.DisplayFramebufferScale = ImVec2(w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
 
     // Setup time step (we don't use SDL_GetTicks() because it is using millisecond resolution)
-    /*static Uint64 frequency = SDL_GetPerformanceFrequency();
+    static Uint64 frequency = SDL_GetPerformanceFrequency();
     Uint64 current_time = SDL_GetPerformanceCounter();
     io.DeltaTime = g_Time > 0 ? (float)((double)(current_time - g_Time) / frequency) : (float)(1.0f / 60.0f);
-    g_Time = current_time;*/
+    g_Time = current_time;
 
-    // Setup mouse inputs (we already got mouse wheel, keyboard keys & characters from our event handler)
-    int mx, my;
-    Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
-    io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
-    io.MouseDown[0] = g_MousePressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;  // If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
-    io.MouseDown[1] = g_MousePressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
-    io.MouseDown[2] = g_MousePressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
-    g_MousePressed[0] = g_MousePressed[1] = g_MousePressed[2] = false;
 
-    // We need to use SDL_CaptureMouse() to easily retrieve mouse coordinates outside of the client area. This is only supported from SDL 2.0.4 (released Jan 2016)
-#if (SDL_MAJOR_VERSION >= 2) && (SDL_MINOR_VERSION >= 0) && (SDL_PATCHLEVEL >= 4)
-    if ((SDL_GetWindowFlags(window) & (SDL_WINDOW_MOUSE_FOCUS | SDL_WINDOW_MOUSE_CAPTURE)) != 0)
-        io.MousePos = ImVec2((float)mx, (float)my);
-    bool any_mouse_button_down = false;
-    for (int n = 0; n < IM_ARRAYSIZE(io.MouseDown); n++)
-        any_mouse_button_down |= io.MouseDown[n];
-    if (any_mouse_button_down && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_CAPTURE) == 0)
-        SDL_CaptureMouse(SDL_TRUE);
-    if (!any_mouse_button_down && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_CAPTURE) != 0)
-        SDL_CaptureMouse(SDL_FALSE);
-#else
-    if ((SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0)
-        io.MousePos = ImVec2((float)mx, (float)my);
-#endif
+    ImGui_ImplSDL2_UpdateMousePosAndButtons();
+    ImGui_ImplSDL2_UpdateMouseCursor();
 
-    // Update OS/hardware mouse cursor if imgui isn't drawing a software cursor
-    ImGuiMouseCursor cursor = ImGui::GetMouseCursor();
-    if (io.MouseDrawCursor || cursor == ImGuiMouseCursor_None)
-    {
-        SDL_ShowCursor(0);
-    }
-    else
-    {
-        SDL_SetCursor(g_MouseCursors[cursor] ? g_MouseCursors[cursor] : g_MouseCursors[ImGuiMouseCursor_Arrow]);
-        SDL_ShowCursor(1);
-    }
-
-    // fix issue when debugging (mouse was still captured by sdl and we cannot use it in debugger)
-    SDL_CaptureMouse(SDL_FALSE);
 
     // Start the frame. This call will update the io.WantCaptureMouse, io.WantCaptureKeyboard flag that you can use to dispatch inputs (or not) to your application.
-    ImGui::NewFrame();
+    ///ImGui::NewFrame();
+    imguiBeginFrame(
+                m_mouseState.m_mx
+                ,  m_mouseState.m_my
+                , (m_mouseState.m_buttons[entry::MouseButton::Left] ? IMGUI_MBUT_LEFT : 0)
+            | (m_mouseState.m_buttons[entry::MouseButton::Right] ? IMGUI_MBUT_RIGHT : 0)
+            | (m_mouseState.m_buttons[entry::MouseButton::Middle] ? IMGUI_MBUT_MIDDLE : 0)
+            ,  m_mouseState.m_mz
+            , uint16_t(__windowSize[0])
+            , uint16_t(__windowSize[1])
+            );
+
+
+    // fix issue when debugging (mouse was still captured by sdl and we cannot use it in debugger)
+    //SDL_CaptureMouse(SDL_FALSE);
 }
 
 // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
@@ -333,8 +430,6 @@ static bool ImGui_ImplSdlGL3_ProcessEvent(SDL_Event* event)
 }
 
 
-
-
 //-------------------------------------------------------------------------------------------------------------
 // Platform SDL2 impl
 //-------------------------------------------------------------------------------------------------------------
@@ -342,6 +437,8 @@ static bool ImGui_ImplSdlGL3_ProcessEvent(SDL_Event* event)
 Platform::Platform(Game* game) :
     _game(game)
 {
+    GP_ASSERT(__app_argc);
+    GP_ASSERT(__app_argv);
 
     std::memset(_translateKey, 0, sizeof(_translateKey));
     initTranslateKey(SDL_SCANCODE_ESCAPE,       Keyboard::KEY_ESCAPE);
@@ -536,10 +633,7 @@ Platform* Platform::create(Game* game, void* externalWindow)
 
     updateWindowSize();
 
-
-
     // Create ImGui context and init
-    ImGui::CreateContext();
     ImGui_ImplSdlGL3_Init(__window);
 
     return platform;
@@ -580,8 +674,10 @@ void Platform::frame()
 
         _game->frame();
 
-        ImGui::Render();
-        GPImGui::Get()->imguiRender(ImGui::GetDrawData());
+        ///ImGui::Render();
+        ///GPImGui::getInstance()->imguiRender(ImGui::GetDrawData());
+        imguiEndFrame();
+
 
         Renderer::getInstance().endFrame();
     }
@@ -595,6 +691,7 @@ int Platform::processEvents()
     {
         // Process ImGui events
         ImGui_ImplSdlGL3_ProcessEvent(&evt);
+
 
         // Process SDL2 events
         switch (evt.type)
@@ -675,8 +772,8 @@ int Platform::processEvents()
 
             case SDL_MOUSEMOTION:
             {
-                if(ImGui::GetIO().WantCaptureMouse)
-                    continue;
+               if(ImGui::GetIO().WantCaptureMouse)
+                   continue;
 
                 const SDL_MouseMotionEvent& motionEvt = evt.motion;
 
@@ -940,6 +1037,12 @@ void Platform::getSensorValues(float* accelX, float* accelY, float* accelZ, floa
     GP_ERROR("Fix me !");
 }
 
+void Platform::setArguments(int* argc, char*** argv)
+{
+    __app_argc = *argc;
+    __app_argv = *argv;
+}
+
 void Platform::getArguments(int* argc, char*** argv)
 {
     if (argc)
@@ -1012,3 +1115,5 @@ void*  Platform::getWindowHandle()
 }
 
 }
+
+#endif // GP_CUSTOM_PLATFORM

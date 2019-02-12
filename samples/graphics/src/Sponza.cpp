@@ -1,7 +1,7 @@
 #include "SamplesGame.h"
 #include "renderer/BGFXRenderer.h"
 #include "FirstPersonCamera.h"
-#include <imgui/imgui.h>
+#include <dear-imgui/imgui.h>
 #include <events/EventManager.h>
 #include <core/FileWatcher.h>
 
@@ -232,8 +232,8 @@ public:
         _scene->getActiveCamera()->setAspectRatio(getAspectRatio());
 
         // Add watcher to shader directory and bind event to be notified on changes
-        FileWatcher::Get()->addDirectory("res/core/shaders", true);
-        EventManager::get()->addListener(GP_EVENT_LISTENER(this, Sponza::onShaderDirectoryEvent), FileWatcherEvent::ID());
+        FileWatcher::getInstance()->addDirectory("res/core/shaders", true);
+        EventManager::getInstance()->addListener(GP_EVENT_LISTENER(this, Sponza::onShaderDirectoryEvent), FileWatcherEvent::ID());
 
 
 
@@ -252,7 +252,7 @@ public:
         texInfo.height = FRAMEBUFFER_HEIGHT;
         texInfo.type = Texture::TEXTURE_RT;
         texInfo.format = Texture::Format::D16;
-        texInfo.flags = BGFX_TEXTURE_RT | BGFX_TEXTURE_COMPARE_LEQUAL;
+        texInfo.flags = BGFX_TEXTURE_RT | BGFX_SAMPLER_COMPARE_LEQUAL;
         Texture* texDepth = Texture::create(texInfo);
 
         std::vector<Texture*> textures;

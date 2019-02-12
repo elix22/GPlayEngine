@@ -19,9 +19,10 @@ QMAKE_CLEAN += $$DESTDIR/$$TARGET
 
 CONFIG(debug, debug|release):
     DEFINES += _DEBUG
-DEFINES += GP_USE_GAMEPAD
-#DEFINES += COMPIL_WITH_LUA
-#DEFINES += GP_NO_SPARK
+DEFINES += GP_USE_GAMEPAD \
+    #GP_CUSTOM_PLATFORM \
+    #COMPIL_WITH_LUA \
+    #GP_NO_SPARK
 
 INCLUDEPATH += $$GPLAY_OUTPUT_DIR/include/gplayengine/
 INCLUDEPATH += $$GPLAY_OUTPUT_DIR/include/gplayengine/thirdparty
@@ -190,7 +191,9 @@ HEADERS += \
     ui/ThemeStyle.h \
     ui/VerticalLayout.h \
     gplay3d.h \
-    graphics/View.h
+    graphics/View.h \
+    graphics/DebugDraw.h \
+    editor/InGameEditor.h
 
 SOURCES += \
     ai/AIAgent.cpp \
@@ -314,7 +317,9 @@ SOURCES += \
     ui/Theme.cpp \
     ui/ThemeStyle.cpp \
     ui/VerticalLayout.cpp \
-    graphics/View.cpp
+    graphics/View.cpp \
+    graphics/DebugDraw.cpp \
+    editor/InGameEditor.cpp
 
 
 #--------------------------------------------------------------------

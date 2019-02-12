@@ -11,6 +11,7 @@
 #include "core/Bundle.h"
 #include "math/MathUtil.h"
 #include "core/Logger.h"
+#include "core/Singleton.h"
 
 // Math
 #include "math/Rectangle.h"
@@ -55,6 +56,7 @@
 #include "graphics/Terrain.h"
 #include "graphics/TerrainPatch.h"
 #include "graphics/View.h"
+#include "graphics/DebugDraw.h"
 
 // Audio
 #include "audio/AudioController.h"
